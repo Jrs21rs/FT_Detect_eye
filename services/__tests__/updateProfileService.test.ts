@@ -1,35 +1,27 @@
-import { updateProfile, UserData } from '../updateProfileService';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
+import { UpdateResponsableData, updateResponsableProfile } from '../updateProfileService';
 
-// Mock AsyncStorage
-jest.mock('@react-native-async-storage/async-storage', () => ({
-  getItem: jest.fn(),
-  setItem: jest.fn(),
-  removeItem: jest.fn(),
-  clear: jest.fn(),
+// Mock expo-secure-store
+jest.mock('expo-secure-store', () => ({
+  getItemAsync: jest.fn(),
+  setItemAsync: jest.fn(),
+  deleteItemAsync: jest.fn(),
 }));
 
 // Mock global fetch
 const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
-const mockAsyncStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;
+const mockSecureStore = SecureStore as jest.Mocked<typeof SecureStore>;
 
 describe('updateProfileService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFetch.mockClear();
-    process.env.NEXT_PUBLIC_API_PACIENTES_URL = 'https://api.example.com';
   });
 
-  afterEach(() => {
-    delete process.env.NEXT_PUBLIC_API_PACIENTES_URL;
-  });
-
-  describe('updateProfile', () => {
-    const mockUserData: UserData = {
+  describe('updateResponsableProfile', () => {
+    const mockUserData: UpdateResponsableData = {
       nombres: 'Juan',
       apellidos: 'Pérez',
-      edad: 30,
-      correo: 'juan@example.com',
       numeroTele: '1234567890'
     };
 
@@ -37,12 +29,10 @@ describe('updateProfileService', () => {
       // Arrange
       const mockToken = 'mock-jwt-token';
       const mockResponse = {
-        success: true,
-        message: 'Perfil actualizado correctamente',
-        data: mockUserData
+        token: mockToken,
       };
 
-      mockAsyncStorage.getItem.mockResolvedValueOnce(mockToken);
+      mockSecureStore.getItemAsync.mockResolvedValueOnce(mockToken);
       mockFetch.mockResolvedValueOnce({
         status: 200,
         ok: true,
@@ -50,15 +40,14 @@ describe('updateProfileService', () => {
       } as Response);
 
       // Act
-      const result = await updateProfile(mockUserData);
+      const result = await updateResponsableProfile(mockUserData);
 
       // Assert
       expect(result).toEqual(mockResponse);
-      expect(mockAsyncStorage.getItem).toHaveBeenCalledWith('userToken');
+      expect(mockSecureStore.getItemAsync).toHaveBeenCalledWith('userToken');
       expect(mockFetch).toHaveBeenCalledTimes(1);
       
       const callArgs = mockFetch.mock.calls[0];
-      expect(callArgs[0]).toBe('https://api.example.com/Update');
       expect(callArgs[1]?.method).toBe('PUT');
       expect(callArgs[1]?.headers).toMatchObject({
         'Content-Type': 'application/json',
@@ -66,35 +55,25 @@ describe('updateProfileService', () => {
       });
     });
 
-    it('debe actualizar el perfil sin token cuando no está disponible', async () => {
+    it('debe retornar error cuando no hay token disponible', async () => {
       // Arrange
-      const mockResponse = {
-        success: true,
-        message: 'Perfil actualizado correctamente'
-      };
-
-      mockAsyncStorage.getItem.mockResolvedValueOnce(null);
-      mockFetch.mockResolvedValueOnce({
-        status: 200,
-        ok: true,
-        json: async () => mockResponse,
-      } as Response);
+      mockSecureStore.getItemAsync.mockResolvedValueOnce(null);
 
       // Act
-      const result = await updateProfile(mockUserData);
+      const result = await updateResponsableProfile(mockUserData);
 
       // Assert
-      expect(result).toEqual(mockResponse);
-      const callArgs = mockFetch.mock.calls[0];
-      expect(callArgs[1]?.headers).not.toHaveProperty('Authorization');
+      expect(result).toHaveProperty('error');
+      expect(result.error).toBe('No hay sesión activa');
+      expect(mockFetch).not.toHaveBeenCalled();
     });
 
     it('debe enviar los datos correctos en el body de la petición', async () => {
       // Arrange
       const mockToken = 'mock-token';
-      const mockResponse = { success: true };
+      const mockResponse = { token: 'new-token' };
 
-      mockAsyncStorage.getItem.mockResolvedValueOnce(mockToken);
+      mockSecureStore.getItemAsync.mockResolvedValueOnce(mockToken);
       mockFetch.mockResolvedValueOnce({
         status: 200,
         ok: true,
@@ -102,7 +81,7 @@ describe('updateProfileService', () => {
       } as Response);
 
       // Act
-      await updateProfile(mockUserData);
+      await updateResponsableProfile(mockUserData);
 
       // Assert
       const callArgs = mockFetch.mock.calls[0];
@@ -110,8 +89,6 @@ describe('updateProfileService', () => {
       expect(body).toMatchObject(mockUserData);
       expect(body.nombres).toBe(mockUserData.nombres);
       expect(body.apellidos).toBe(mockUserData.apellidos);
-      expect(body.edad).toBe(mockUserData.edad);
-      expect(body.correo).toBe(mockUserData.correo);
       expect(body.numeroTele).toBe(mockUserData.numeroTele);
     });
 
@@ -119,10 +96,10 @@ describe('updateProfileService', () => {
       // Arrange
       const mockToken = 'mock-token';
       const errorResponse = {
-        message: 'Error al actualizar el perfil'
+        error: 'Error al actualizar el perfil'
       };
 
-      mockAsyncStorage.getItem.mockResolvedValueOnce(mockToken);
+      mockSecureStore.getItemAsync.mockResolvedValueOnce(mockToken);
       mockFetch.mockResolvedValueOnce({
         status: 400,
         ok: false,
@@ -130,7 +107,7 @@ describe('updateProfileService', () => {
       } as Response);
 
       // Act
-      const result = await updateProfile(mockUserData);
+      const result = await updateResponsableProfile(mockUserData);
 
       // Assert
       expect(result).toHaveProperty('error');
@@ -141,7 +118,7 @@ describe('updateProfileService', () => {
       // Arrange
       const mockToken = 'mock-token';
 
-      mockAsyncStorage.getItem.mockResolvedValueOnce(mockToken);
+      mockSecureStore.getItemAsync.mockResolvedValueOnce(mockToken);
       mockFetch.mockResolvedValueOnce({
         status: 500,
         ok: false,
@@ -149,7 +126,7 @@ describe('updateProfileService', () => {
       } as Response);
 
       // Act
-      const result = await updateProfile(mockUserData);
+      const result = await updateResponsableProfile(mockUserData);
 
       // Assert
       expect(result).toHaveProperty('error');
@@ -161,40 +138,37 @@ describe('updateProfileService', () => {
       const mockToken = 'mock-token';
       const connectionError = new Error('Network error');
 
-      mockAsyncStorage.getItem.mockResolvedValueOnce(mockToken);
+      mockSecureStore.getItemAsync.mockResolvedValueOnce(mockToken);
       mockFetch.mockRejectedValueOnce(connectionError);
 
       // Act
-      const result = await updateProfile(mockUserData);
+      const result = await updateResponsableProfile(mockUserData);
 
       // Assert
       expect(result).toHaveProperty('error');
       expect(result.error).toBe('Error al conectar con el servidor');
     });
 
-    it('debe manejar errores al obtener el token de AsyncStorage', async () => {
+    it('debe manejar errores al obtener el token de SecureStore', async () => {
       // Arrange
       const storageError = new Error('Storage error');
 
-      mockAsyncStorage.getItem.mockRejectedValueOnce(storageError);
-      // El servicio maneja el error en el catch y retorna un objeto con error
-      // pero como el error ocurre antes del fetch, no se llama a fetch
+      mockSecureStore.getItemAsync.mockRejectedValueOnce(storageError);
       
       // Act
-      const result = await updateProfile(mockUserData);
+      const result = await updateResponsableProfile(mockUserData);
 
       // Assert
-      // El servicio debería retornar un error cuando falla AsyncStorage
       expect(result).toHaveProperty('error');
-      expect(mockAsyncStorage.getItem).toHaveBeenCalledWith('userToken');
+      expect(mockSecureStore.getItemAsync).toHaveBeenCalledWith('userToken');
     });
 
     it('debe configurar los headers correctamente con token', async () => {
       // Arrange
       const mockToken = 'bearer-token-123';
-      const mockResponse = { success: true };
+      const mockResponse = { token: 'new-token' };
 
-      mockAsyncStorage.getItem.mockResolvedValueOnce(mockToken);
+      mockSecureStore.getItemAsync.mockResolvedValueOnce(mockToken);
       mockFetch.mockResolvedValueOnce({
         status: 200,
         ok: true,
@@ -202,7 +176,7 @@ describe('updateProfileService', () => {
       } as Response);
 
       // Act
-      await updateProfile(mockUserData);
+      await updateResponsableProfile(mockUserData);
 
       // Assert
       const callArgs = mockFetch.mock.calls[0];
@@ -212,19 +186,19 @@ describe('updateProfileService', () => {
       });
     });
 
-    it('debe manejar diferentes valores de edad', async () => {
+    it('debe manejar diferentes valores opcionales', async () => {
       // Arrange
-      const testCases = [
-        { ...mockUserData, edad: 0 },
-        { ...mockUserData, edad: 18 },
-        { ...mockUserData, edad: 65 },
-        { ...mockUserData, edad: 100 }
+      const testCases: UpdateResponsableData[] = [
+        { nombres: 'Juan', apellidos: 'Pérez' },
+        { nombres: 'Juan', apellidos: 'Pérez', numeroTele: '1234567890' },
+        { nombres: 'Juan', apellidos: 'Pérez', parentesco: 'Padre' },
+        { nombres: 'Juan', apellidos: 'Pérez', ocupacion: 'Médico', ciudadResidencia: 'Bogotá' },
       ];
       const mockToken = 'mock-token';
-      const mockResponse = { success: true };
+      const mockResponse = { token: 'new-token' };
 
       for (const userData of testCases) {
-        mockAsyncStorage.getItem.mockResolvedValueOnce(mockToken);
+        mockSecureStore.getItemAsync.mockResolvedValueOnce(mockToken);
         mockFetch.mockResolvedValueOnce({
           status: 200,
           ok: true,
@@ -232,28 +206,30 @@ describe('updateProfileService', () => {
         } as Response);
 
         // Act
-        await updateProfile(userData);
+        await updateResponsableProfile(userData);
 
         // Assert
         const callArgs = mockFetch.mock.calls[mockFetch.mock.calls.length - 1];
         const body = JSON.parse(callArgs[1]?.body as string);
-        expect(body.edad).toBe(userData.edad);
+        expect(body.nombres).toBe(userData.nombres);
+        expect(body.apellidos).toBe(userData.apellidos);
       }
     });
 
     it('debe manejar strings vacíos en campos opcionales', async () => {
       // Arrange
-      const userDataWithEmptyFields: UserData = {
+      const userDataWithEmptyFields: UpdateResponsableData = {
         nombres: 'Juan',
         apellidos: 'Pérez',
-        edad: 30,
-        correo: '',
-        numeroTele: ''
+        numeroTele: '',
+        parentesco: '',
+        ocupacion: '',
+        ciudadResidencia: ''
       };
       const mockToken = 'mock-token';
-      const mockResponse = { success: true };
+      const mockResponse = { token: 'new-token' };
 
-      mockAsyncStorage.getItem.mockResolvedValueOnce(mockToken);
+      mockSecureStore.getItemAsync.mockResolvedValueOnce(mockToken);
       mockFetch.mockResolvedValueOnce({
         status: 200,
         ok: true,
@@ -261,13 +237,15 @@ describe('updateProfileService', () => {
       } as Response);
 
       // Act
-      await updateProfile(userDataWithEmptyFields);
+      await updateResponsableProfile(userDataWithEmptyFields);
 
       // Assert
       const callArgs = mockFetch.mock.calls[0];
       const body = JSON.parse(callArgs[1]?.body as string);
-      expect(body.correo).toBe('');
       expect(body.numeroTele).toBe('');
+      expect(body.parentesco).toBe('');
+      expect(body.ocupacion).toBe('');
+      expect(body.ciudadResidencia).toBe('');
     });
   });
 });

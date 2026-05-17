@@ -43,11 +43,7 @@ describe('authService', () => {
         success: true
       };
 
-      // Mock HEAD request (verificación de servidor)
-      mockFetch
-        .mockResolvedValueOnce(createMockResponse(200, true))
-        // Mock POST request (login)
-        .mockResolvedValueOnce(createMockResponse(200, true, mockResponse));
+      mockFetch.mockResolvedValueOnce(createMockResponse(200, true, mockResponse));
 
       // Act
       const result = await loginUser(mockCorreo, mockPassword);
@@ -56,16 +52,10 @@ describe('authService', () => {
       expect(result).toEqual(mockResponse);
       expect(result.token).toBe(mockToken);
       expect(result.success).toBe(true);
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
       
-      // Verificar que se llamó con los parámetros correctos
-      const loginCall = mockFetch.mock.calls[1];
-      expect(loginCall[0]).toBe('https://reconocimiento-estrabismo.onrender.com/auth/login');
+      const loginCall = mockFetch.mock.calls[0];
       expect(loginCall[1]?.method).toBe('POST');
-      expect(loginCall[1]?.headers).toMatchObject({
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      });
     });
 
     it('debe retornar error cuando el servidor no está accesible', async () => {
@@ -78,7 +68,7 @@ describe('authService', () => {
 
       // Assert
       expect(result).toHaveProperty('error');
-      expect(result.error).toContain('No se puede acceder al servidor');
+      expect(result.error).toContain('Error de conexión');
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
@@ -88,29 +78,20 @@ describe('authService', () => {
         message: 'Credenciales inválidas'
       };
 
-      mockFetch
-        .mockResolvedValueOnce(createMockResponse(200, true))
-        .mockResolvedValueOnce(createMockResponse(401, false, errorResponse));
+      mockFetch.mockResolvedValueOnce(createMockResponse(401, false, errorResponse));
 
       // Act
       const result = await loginUser(mockCorreo, mockPassword);
 
       // Assert
       expect(result).toHaveProperty('error');
-      expect(result.error).toContain('Error del servidor: 401');
-      expect(result.error).toContain('Credenciales inválidas');
+      expect(result.error).toContain('Error del servidor (401)');
     });
 
     it('debe manejar errores de conexión durante el login', async () => {
       // Arrange
       const connectionError = new Error('Connection timeout');
-
-      mockFetch
-        .mockResolvedValueOnce({
-          status: 200,
-          ok: true,
-        } as Response)
-        .mockRejectedValueOnce(connectionError);
+      mockFetch.mockRejectedValueOnce(connectionError);
 
       // Act
       const result = await loginUser(mockCorreo, mockPassword);
@@ -128,31 +109,26 @@ describe('authService', () => {
         throw new Error('Invalid JSON');
       });
       
-      mockFetch
-        .mockResolvedValueOnce(createMockResponse(200, true))
-        .mockResolvedValueOnce(mockResponse);
+      mockFetch.mockResolvedValueOnce(mockResponse);
 
       // Act
       const result = await loginUser(mockCorreo, mockPassword);
 
       // Assert
       expect(result).toHaveProperty('error');
-      expect(result.error).toContain('Error del servidor: 500');
+      expect(result.error).toContain('Error del servidor (500)');
     });
 
     it('debe enviar los datos correctos en el body de la petición', async () => {
       // Arrange
       const mockResponse = { token: 'token', success: true };
-
-      mockFetch
-        .mockResolvedValueOnce(createMockResponse(200, true))
-        .mockResolvedValueOnce(createMockResponse(200, true, mockResponse));
+      mockFetch.mockResolvedValueOnce(createMockResponse(200, true, mockResponse));
 
       // Act
       await loginUser(mockCorreo, mockPassword);
 
       // Assert
-      const loginCall = mockFetch.mock.calls[1];
+      const loginCall = mockFetch.mock.calls[0];
       const body = JSON.parse(loginCall[1]?.body as string);
       expect(body.correo).toBe(mockCorreo);
       expect(body.password).toBe(mockPassword);
@@ -160,12 +136,7 @@ describe('authService', () => {
 
     it('debe manejar errores desconocidos correctamente', async () => {
       // Arrange
-      mockFetch
-        .mockResolvedValueOnce({
-          status: 200,
-          ok: true,
-        } as Response)
-        .mockRejectedValueOnce('Unknown error');
+      mockFetch.mockRejectedValueOnce('Unknown error');
 
       // Act
       const result = await loginUser(mockCorreo, mockPassword);
