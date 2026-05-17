@@ -1,6 +1,6 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { jwtDecode } from 'jwt-decode';
 import { createContext, useContext, useEffect, useState } from 'react';
+import { tokenStorage } from './tokenStorage';
 
 interface UserData {
   id: number;
@@ -19,6 +19,11 @@ interface UserData {
   exp?: number;
   sub?: string;
 }
+
+const isTokenExpired = (decoded: UserData): boolean => {
+  if (!decoded.exp) return false;
+  return decoded.exp * 1000 < Date.now();
+};
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -39,14 +44,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const checkToken = async () => {
-    const token = await AsyncStorage.getItem('userToken');
+    const token = await tokenStorage.getToken();
     if (token) {
       try {
         const decoded = jwtDecode<UserData>(token);
+        if (isTokenExpired(decoded)) {
+          await logout();
+          return;
+        }
         setUserData(decoded);
         setIsAuthenticated(true);
       } catch (error) {
-        console.error('Error decodificando el token:', error);
         await logout();
       }
     }
@@ -55,17 +63,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (token: string) => {
     try {
       const decoded = jwtDecode<UserData>(token);
-      await AsyncStorage.setItem('userToken', token);
+      if (isTokenExpired(decoded)) {
+        throw new Error('El token ha expirado');
+      }
+      await tokenStorage.setToken(token);
       setUserData(decoded);
       setIsAuthenticated(true);
     } catch (error) {
-      console.error('Error al decodificar el token:', error);
       throw error;
     }
   };
 
   const logout = async () => {
-    await AsyncStorage.removeItem('userToken');
+    await tokenStorage.removeToken();
     setUserData(null);
     setIsAuthenticated(false);
   };
@@ -73,10 +83,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const updateToken = async (token: string) => {
     try {
       const decoded = jwtDecode<UserData>(token);
-      await AsyncStorage.setItem('userToken', token);
+      if (isTokenExpired(decoded)) {
+        throw new Error('El token ha expirado');
+      }
+      await tokenStorage.setToken(token);
       setUserData(decoded);
     } catch (error) {
-      console.error('Error al actualizar el token:', error);
       throw error;
     }
   };

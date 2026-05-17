@@ -2,6 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Stack } from "expo-router";
 import React, { useEffect, useState } from 'react';
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import DevelopmentNav from "../components/DevelopmentNav";
+import { profile } from "../config/env";
 import { AuthProvider, useAuth } from "../services/authContext";
 
 export default function Layout() {
@@ -36,8 +38,9 @@ function RootLayoutNav() {
   return (
     <>
       <Stack screenOptions={{ headerShown: false }}>
-        {!isAuthenticated ? (
+        {profile.isDevelopment ? (
           <>
+            {/* Modo desarrollo: mostrar todas las pantallas sin autenticación */}
             <Stack.Screen name="index" />
             <Stack.Screen
               name="login"
@@ -51,13 +54,37 @@ function RootLayoutNav() {
                 presentation: 'modal'
               }}
             />
+            <Stack.Screen name="(tabs)" />
           </>
         ) : (
           <>
-            <Stack.Screen name="(tabs)" />
+            {/* Producción/Staging: aplicar autenticación */}
+            {!isAuthenticated ? (
+              <>
+                <Stack.Screen name="index" />
+                <Stack.Screen
+                  name="login"
+                  options={{
+                    presentation: 'modal'
+                  }}
+                />
+                <Stack.Screen
+                  name="register"
+                  options={{
+                    presentation: 'modal'
+                  }}
+                />
+              </>
+            ) : (
+              <>
+                <Stack.Screen name="(tabs)" />
+              </>
+            )}
           </>
         )}
       </Stack>
+
+      <DevelopmentNav />
 
       <Modal
         visible={isAuthenticated && showDisclaimer}

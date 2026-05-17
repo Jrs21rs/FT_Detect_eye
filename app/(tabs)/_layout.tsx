@@ -1,11 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from "expo-router";
+import { profile } from "../../config/env";
 import { useAuth } from "../../services/authContext";
 
 export default function Layout() {
   const { isAuthenticated } = useAuth();
 
-  if (!isAuthenticated) {
+  // En modo desarrollo, mostrar tabs sin verificar autenticación
+  if (!profile.isDevelopment && !isAuthenticated) {
     return null;
   }
 
